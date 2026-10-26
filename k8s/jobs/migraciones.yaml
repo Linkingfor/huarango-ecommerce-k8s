@@ -1,0 +1,53 @@
+# Crea los esquemas, los usuarios de cada servicio y el catálogo inicial en Amazon RDS.
+# Se ejecuta desde dentro del clúster porque la base no tiene acceso desde internet.
+# Usa los mismos archivos de db/ (ConfigMap sql-migraciones, creado por scripts/deploy-k8s.sh).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migraciones
+  namespace: ecommerce
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: psql
+          image: public.ecr.aws/docker/library/postgres:16-alpine
+          command: ["sh", "/sql/migrar.sh"]
+          env:
+            - { name: SQL_DIR, value: /sql }
+            - { name: PGSSLMODE, value: require }
+            - name: PGHOST
+              valueFrom: { configMapKeyRef: { name: config-aws, key: DB_HOST } }
+            - name: PGPORT
+              valueFrom: { configMapKeyRef: { name: config-aws, key: DB_PORT } }
+            - name: PGDATABASE
+              valueFrom: { configMapKeyRef: { name: config-aws, key: DB_NAME } }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: db-admin, key: username } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: db-admin, key: password } }
+            - name: DB_PW_USUARIOS
+              valueFrom: { secretKeyRef: { name: db-usuarios, key: DB_PASSWORD } }
+            - name: DB_PW_CATALOGO
+              valueFrom: { secretKeyRef: { name: db-catalogo, key: DB_PASSWORD } }
+            - name: DB_PW_ORDENES
+              valueFrom: { secretKeyRef: { name: db-ordenes, key: DB_PASSWORD } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: sql, mountPath: /sql, readOnly: true }
+      volumes:
+        - name: sql
+          configMap: { name: sql-migraciones }

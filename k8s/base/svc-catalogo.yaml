@@ -1,0 +1,89 @@
+# svc-catalogo: Catálogo, imágenes y reservas de stock
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-catalogo
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-catalogo
+  namespace: ecommerce
+  labels: { app: svc-catalogo, parte-de: huarango }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-catalogo }
+  template:
+    metadata:
+      labels: { app: svc-catalogo, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3002"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-catalogo
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-catalogo }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-catalogo
+          ports:
+            - { name: http, containerPort: 3002 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: db-catalogo }
+            - secretRef: { name: jwt-publica }
+          resources:
+            requests: { cpu: 150m, memory: 192Mi }
+            limits: { memory: 384Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-catalogo
+  namespace: ecommerce
+  labels: { app: svc-catalogo }
+spec:
+  selector: { app: svc-catalogo }
+  ports:
+    - { name: http, port: 3002, targetPort: http }

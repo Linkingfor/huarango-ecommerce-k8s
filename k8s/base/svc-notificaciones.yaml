@@ -1,0 +1,88 @@
+# svc-notificaciones: Worker de correos (consume q-notificaciones)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-notificaciones
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-notificaciones
+  namespace: ecommerce
+  labels: { app: svc-notificaciones, parte-de: huarango }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-notificaciones }
+  template:
+    metadata:
+      labels: { app: svc-notificaciones, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3006"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-notificaciones
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-notificaciones }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-notificaciones
+          ports:
+            - { name: http, containerPort: 3006 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: smtp, optional: true }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { memory: 192Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-notificaciones
+  namespace: ecommerce
+  labels: { app: svc-notificaciones }
+spec:
+  selector: { app: svc-notificaciones }
+  ports:
+    - { name: http, port: 3006, targetPort: http }

@@ -1,0 +1,50 @@
+# Mailpit: servidor SMTP de pruebas con bandeja web, para ver los correos de la tienda en la demo.
+# Para usar un SMTP real, carga sus datos con scripts/cargar-secretos.sh (secreto "smtp").
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: ecommerce
+  labels: { app: mailpit }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mailpit }
+  template:
+    metadata:
+      labels: { app: mailpit }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          ports:
+            - { name: smtp, containerPort: 1025 }
+            - { name: web, containerPort: 8025 }
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }   # Mailpit guarda los correos en un archivo temporal
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: ecommerce
+spec:
+  selector: { app: mailpit }
+  ports:
+    - { name: smtp, port: 1025, targetPort: smtp }
+    - { name: web, port: 8025, targetPort: web }

@@ -1,0 +1,88 @@
+# svc-pagos: Worker de cobros (consume cola-pagos)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-pagos
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-pagos
+  namespace: ecommerce
+  labels: { app: svc-pagos, parte-de: huarango }
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-pagos }
+  template:
+    metadata:
+      labels: { app: svc-pagos, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3005"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-pagos
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-pagos }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-pagos
+          ports:
+            - { name: http, containerPort: 3005 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: pagos }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-pagos
+  namespace: ecommerce
+  labels: { app: svc-pagos }
+spec:
+  selector: { app: svc-pagos }
+  ports:
+    - { name: http, port: 3005, targetPort: http }

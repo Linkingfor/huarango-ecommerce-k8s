@@ -1,0 +1,88 @@
+# svc-carrito: Carrito sobre DynamoDB
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-carrito
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-carrito
+  namespace: ecommerce
+  labels: { app: svc-carrito, parte-de: huarango }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-carrito }
+  template:
+    metadata:
+      labels: { app: svc-carrito, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3003"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-carrito
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-carrito }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-carrito
+          ports:
+            - { name: http, containerPort: 3003 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: jwt-publica }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-carrito
+  namespace: ecommerce
+  labels: { app: svc-carrito }
+spec:
+  selector: { app: svc-carrito }
+  ports:
+    - { name: http, port: 3003, targetPort: http }

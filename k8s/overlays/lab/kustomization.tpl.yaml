@@ -1,0 +1,38 @@
+# Plantilla del overlay del laboratorio. scripts/deploy-k8s.sh la copia a kustomization.yaml
+# reemplazando __REGISTRO__ (cuenta de ECR) y __TAG__ (SHA del commit). El archivo generado no se sube.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+
+# config-aws.env también lo genera el script, con las salidas de Terraform.
+configMapGenerator:
+  - name: config-aws
+    namespace: ecommerce
+    envs:
+      - config-aws.env
+generatorOptions:
+  disableNameSuffixHash: true
+
+images:
+  - name: huarango/web-frontend
+    newName: __REGISTRO__/huarango/web-frontend
+    newTag: "__TAG__"
+  - name: huarango/svc-usuarios
+    newName: __REGISTRO__/huarango/svc-usuarios
+    newTag: "__TAG__"
+  - name: huarango/svc-catalogo
+    newName: __REGISTRO__/huarango/svc-catalogo
+    newTag: "__TAG__"
+  - name: huarango/svc-carrito
+    newName: __REGISTRO__/huarango/svc-carrito
+    newTag: "__TAG__"
+  - name: huarango/svc-ordenes
+    newName: __REGISTRO__/huarango/svc-ordenes
+    newTag: "__TAG__"
+  - name: huarango/svc-pagos
+    newName: __REGISTRO__/huarango/svc-pagos
+    newTag: "__TAG__"
+  - name: huarango/svc-notificaciones
+    newName: __REGISTRO__/huarango/svc-notificaciones
+    newTag: "__TAG__"

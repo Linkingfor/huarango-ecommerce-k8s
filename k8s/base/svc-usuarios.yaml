@@ -1,0 +1,90 @@
+# svc-usuarios: Registro, inicio de sesión y JWT
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-usuarios
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-usuarios
+  namespace: ecommerce
+  labels: { app: svc-usuarios, parte-de: huarango }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-usuarios }
+  template:
+    metadata:
+      labels: { app: svc-usuarios, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-usuarios
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-usuarios }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-usuarios
+          ports:
+            - { name: http, containerPort: 3001 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: db-usuarios }
+            - secretRef: { name: jwt-privada }
+            - secretRef: { name: tienda-admin }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-usuarios
+  namespace: ecommerce
+  labels: { app: svc-usuarios }
+spec:
+  selector: { app: svc-usuarios }
+  ports:
+    - { name: http, port: 3001, targetPort: http }

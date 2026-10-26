@@ -1,0 +1,14 @@
+# Manifiestos comunes de la tienda. La configuración propia de la cuenta (URLs de colas, host de RDS,
+# imágenes de ECR) la agrega el overlay k8s/overlays/lab que genera scripts/deploy-k8s.sh.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - web-frontend.yaml
+  - svc-usuarios.yaml
+  - svc-catalogo.yaml
+  - svc-carrito.yaml
+  - svc-ordenes.yaml
+  - svc-pagos.yaml
+  - svc-notificaciones.yaml
+  - mailpit.yaml

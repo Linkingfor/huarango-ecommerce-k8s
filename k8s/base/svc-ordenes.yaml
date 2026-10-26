@@ -1,0 +1,89 @@
+# svc-ordenes: Checkout y órdenes
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-ordenes
+  namespace: ecommerce
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-ordenes
+  namespace: ecommerce
+  labels: { app: svc-ordenes, parte-de: huarango }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: svc-ordenes }
+  template:
+    metadata:
+      labels: { app: svc-ordenes, parte-de: huarango }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3004"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: sa-ordenes
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: svc-ordenes }
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: app
+          image: huarango/svc-ordenes
+          ports:
+            - { name: http, containerPort: 3004 }
+          envFrom:
+            - configMapRef: { name: config-aws }
+            - secretRef: { name: db-ordenes }
+            - secretRef: { name: jwt-publica }
+          resources:
+            requests: { cpu: 150m, memory: 192Mi }
+            limits: { memory: 384Mi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-ordenes
+  namespace: ecommerce
+  labels: { app: svc-ordenes }
+spec:
+  selector: { app: svc-ordenes }
+  ports:
+    - { name: http, port: 3004, targetPort: http }
