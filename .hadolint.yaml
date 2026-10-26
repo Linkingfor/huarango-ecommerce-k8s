@@ -1,0 +1,5 @@
+# Configuración de hadolint (revisión de Dockerfiles en la integración continua).
+# DL3018 pide fijar la versión de cada paquete de apk. Solo instalamos tini, y su versión ya queda
+# determinada por la imagen base node:24-alpine; fijarla rompería la construcción cuando Alpine la actualice.
+ignored:
+  - DL3018

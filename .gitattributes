@@ -1,0 +1,5 @@
+# Finales de línea LF en todo el repositorio: los scripts y las migraciones se ejecutan dentro de
+# contenedores Linux y fallan si llegan con CRLF desde Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

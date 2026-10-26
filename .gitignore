@@ -1,0 +1,32 @@
+# Dependencias y compilados
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+
+# Secretos y configuración local: nunca se suben
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+.terraform.tfstate.lock.info
+
+# Kubernetes: archivos generados por scripts con datos de la cuenta
+k8s/overlays/lab/kustomization.yaml
+k8s/overlays/lab/config-aws.env
+kubeconfig*
+
+# Editor y sistema
+.DS_Store
+.idea/
+.vscode/
+*.swp
