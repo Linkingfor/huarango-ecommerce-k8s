@@ -1,0 +1,9 @@
+# Copia este archivo a terraform.tfvars y completa tu IP pública.
+# Para conocerla: curl -s https://checkip.amazonaws.com
+cidrs_administracion = ["203.0.113.10/32"]
+
+responsable = "grupo-huarango"
+admin_email = "admin@huarango.pe"
+
+# Si el laboratorio rechaza la llave KMS propia para el clúster, cambia a false.
+cifrar_secretos_eks = true
