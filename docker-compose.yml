@@ -1,0 +1,155 @@
+# Entorno local completo de Huarango Market: 7 componentes propios + PostgreSQL, DynamoDB Local,
+# ElasticMQ (compatible con SQS) y Mailpit para ver los correos.
+#   cp .env.example .env
+#   docker compose up -d --build
+# Tienda: http://localhost:8080   Correos: http://localhost:8025
+
+name: huarango
+
+x-servicio: &servicio
+  restart: unless-stopped
+  env_file: .env
+  environment: &entorno-comun
+    AWS_REGION: us-east-1
+    AWS_ACCESS_KEY_ID: local
+    AWS_SECRET_ACCESS_KEY: local
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_NAME: huarango
+    DB_SSL: disable
+    USUARIOS_URL: http://svc-usuarios:3001
+    CATALOGO_URL: http://svc-catalogo:3002
+    SQS_ENDPOINT: http://sqs:9324
+    COLA_PAGOS_URL: cola-pagos
+    Q_ORDENES_ESTADO_URL: q-ordenes-estado
+    Q_NOTIFICACIONES_URL: q-notificaciones
+    COLA_NOTIFICACIONES_URL: q-notificaciones
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: huarango
+      POSTGRES_USER: huarango_admin
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:?Copia .env.example a .env antes de levantar el entorno}
+      DB_PW_USUARIOS: ${DB_PW_USUARIOS}
+      DB_PW_CATALOGO: ${DB_PW_CATALOGO}
+      DB_PW_ORDENES: ${DB_PW_ORDENES}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U huarango_admin -d huarango"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    restart: unless-stopped
+    # Emulador local: guarda las tablas en un volumen para que los carritos sobrevivan a un reinicio.
+    # Corre como root solo para poder escribir en el volumen; en AWS se usa DynamoDB administrado.
+    user: root
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    volumes:
+      - ddbdata:/data
+
+  sqs:
+    image: softwaremill/elasticmq-native:latest
+    restart: unless-stopped
+    volumes:
+      - ./local/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+  svc-usuarios:
+    <<: *servicio
+    build: ./services/svc-usuarios
+    environment:
+      <<: *entorno-comun
+      DB_USER: svc_usuarios
+      DB_PASSWORD: ${DB_PW_USUARIOS}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  svc-catalogo:
+    <<: *servicio
+    build: ./services/svc-catalogo
+    environment:
+      <<: *entorno-comun
+      DB_USER: svc_catalogo
+      DB_PASSWORD: ${DB_PW_CATALOGO}
+      STORAGE_MODE: local
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media
+    depends_on:
+      postgres: { condition: service_healthy }
+      svc-usuarios: { condition: service_started }
+
+  svc-carrito:
+    <<: *servicio
+    build: ./services/svc-carrito
+    environment:
+      <<: *entorno-comun
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      CARRITO_TABLE: carritos
+      CREAR_TABLA: "true"
+    depends_on:
+      - dynamodb
+      - svc-catalogo
+
+  svc-ordenes:
+    <<: *servicio
+    build: ./services/svc-ordenes
+    environment:
+      <<: *entorno-comun
+      DB_USER: svc_ordenes
+      DB_PASSWORD: ${DB_PW_ORDENES}
+    depends_on:
+      postgres: { condition: service_healthy }
+      sqs: { condition: service_started }
+      svc-catalogo: { condition: service_started }
+
+  svc-pagos:
+    <<: *servicio
+    build: ./services/svc-pagos
+    environment:
+      <<: *entorno-comun
+      MODO_EVENTOS: directo
+      PASARELA_MODO: ${PASARELA_MODO:-simulado}
+    depends_on:
+      - sqs
+
+  svc-notificaciones:
+    <<: *servicio
+    build: ./services/svc-notificaciones
+    environment:
+      <<: *entorno-comun
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    depends_on:
+      - sqs
+      - mailpit
+
+  web-frontend:
+    build: ./services/web-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - svc-usuarios
+      - svc-catalogo
+      - svc-carrito
+      - svc-ordenes
+      - svc-pagos
+
+volumes:
+  pgdata:
+  ddbdata:
+  media:
