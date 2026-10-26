@@ -1,0 +1,113 @@
+# Integración continua: se ejecuta en cada push y en cada pull request a main.
+# Revisa que el código compile y pase sus pruebas, que las imágenes se construyan
+# y que Terraform, Kubernetes y los scripts estén bien escritos. No despliega nada (el despliegue va en el APF3).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: pruebas ${{ matrix.servicio }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio: [svc-usuarios, svc-catalogo, svc-carrito, svc-ordenes, svc-pagos, svc-notificaciones]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.servicio }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/${{ matrix.servicio }}/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/web-frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/web-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  imagenes:
+    name: imagen ${{ matrix.servicio }}
+    needs: [pruebas, frontend]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio: [web-frontend, svc-usuarios, svc-catalogo, svc-carrito, svc-ordenes, svc-pagos, svc-notificaciones]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Revisar el Dockerfile con hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: services/${{ matrix.servicio }}/Dockerfile
+          failure-threshold: error
+      - uses: docker/setup-buildx-action@v3
+      - name: Construir la imagen (sin publicarla)
+        run: |
+          docker buildx build --platform linux/amd64 --load \
+            -t huarango/${{ matrix.servicio }}:ci services/${{ matrix.servicio }}
+          docker image ls huarango/${{ matrix.servicio }}:ci --format 'Tamaño de la imagen: {{.Size}}'
+
+  compose:
+    needs: [pruebas, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validar docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - name: Formato
+        run: terraform fmt -check -recursive -diff infra
+      - name: Validación
+        working-directory: infra/envs/lab
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  kubernetes-y-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validar los manifiestos contra el esquema de Kubernetes
+        run: |
+          pipx install kubernetes-validate
+          manifiestos=()
+          for f in k8s/base/*.yaml k8s/jobs/*.yaml; do
+            [[ "$f" == *kustomization.yaml ]] || manifiestos+=("$f")
+          done
+          kubernetes-validate --strict -k 1.35.0 --quiet "${manifiestos[@]}"
+      - name: Revisar los scripts con shellcheck
+        run: shellcheck -x scripts/*.sh db/migrar.sh
