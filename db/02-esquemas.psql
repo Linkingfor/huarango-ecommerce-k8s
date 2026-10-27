@@ -1,0 +1,92 @@
+-- Esquemas y tablas. Cada microservicio es dueño de un esquema y ningún servicio lee las tablas de otro.
+
+-- ---------------------------------------------------------------- usuarios
+CREATE SCHEMA IF NOT EXISTS usuarios AUTHORIZATION CURRENT_USER;
+
+CREATE TABLE IF NOT EXISTS usuarios.usuarios (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email      text NOT NULL UNIQUE,
+  nombre     text NOT NULL,
+  hash       text NOT NULL,
+  rol        text NOT NULL DEFAULT 'cliente' CHECK (rol IN ('cliente', 'admin')),
+  creado_en  timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------- catálogo
+CREATE SCHEMA IF NOT EXISTS catalogo AUTHORIZATION CURRENT_USER;
+
+CREATE TABLE IF NOT EXISTS catalogo.productos (
+  id              text PRIMARY KEY,
+  nombre          text NOT NULL,
+  descripcion     text NOT NULL DEFAULT '',
+  categoria       text NOT NULL,
+  bodega          text NOT NULL DEFAULT '',
+  precio          numeric(10, 2) NOT NULL CHECK (precio >= 0),
+  stock           integer NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  imagen          text,
+  activo          boolean NOT NULL DEFAULT true,
+  actualizado_en  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS productos_categoria_idx ON catalogo.productos (categoria);
+
+CREATE TABLE IF NOT EXISTS catalogo.reservas (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  orden_ref       text NOT NULL UNIQUE,
+  estado          text NOT NULL DEFAULT 'ACTIVA' CHECK (estado IN ('ACTIVA', 'CONFIRMADA', 'LIBERADA')),
+  items           jsonb NOT NULL,
+  creada_en       timestamptz NOT NULL DEFAULT now(),
+  actualizada_en  timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------- órdenes
+CREATE SCHEMA IF NOT EXISTS ordenes AUTHORIZATION CURRENT_USER;
+
+CREATE TABLE IF NOT EXISTS ordenes.ordenes (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  cliente_id       uuid NOT NULL,
+  cliente_email    text NOT NULL,
+  cliente_nombre   text NOT NULL,
+  idempotency_key  text NOT NULL,
+  estado           text NOT NULL DEFAULT 'PENDIENTE_PAGO' CHECK (estado IN (
+                     'PENDIENTE_PAGO', 'PAGADA', 'PAGO_RECHAZADO', 'EXPIRADA',
+                     'PREPARANDO', 'ENVIADO', 'ENTREGADO')),
+  total            numeric(10, 2) NOT NULL,
+  items            jsonb NOT NULL,
+  entrega          jsonb NOT NULL,
+  reserva_id       uuid NOT NULL,
+  pago_ref         text,
+  creada_en        timestamptz NOT NULL DEFAULT now(),
+  actualizada_en   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (cliente_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS ordenes_cliente_idx ON ordenes.ordenes (cliente_id, creada_en DESC);
+CREATE INDEX IF NOT EXISTS ordenes_pendientes_idx ON ordenes.ordenes (creada_en) WHERE estado = 'PENDIENTE_PAGO';
+
+-- Patrón outbox: la orden y su mensaje se guardan en la misma transacción.
+CREATE TABLE IF NOT EXISTS ordenes.outbox (
+  id          bigserial PRIMARY KEY,
+  destino     text NOT NULL CHECK (destino IN ('pagos', 'notificaciones')),
+  payload     jsonb NOT NULL,
+  creado_en   timestamptz NOT NULL DEFAULT now(),
+  enviado_en  timestamptz
+);
+CREATE INDEX IF NOT EXISTS outbox_pendientes_idx ON ordenes.outbox (id) WHERE enviado_en IS NULL;
+
+-- Eventos ya procesados, para descartar mensajes repetidos (SQS entrega al menos una vez).
+CREATE TABLE IF NOT EXISTS ordenes.eventos_procesados (
+  evento_id     text PRIMARY KEY,
+  procesado_en  timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------- permisos (mínimo privilegio)
+REVOKE ALL ON SCHEMA usuarios, catalogo, ordenes FROM PUBLIC;
+
+GRANT USAGE ON SCHEMA usuarios TO svc_usuarios;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA usuarios TO svc_usuarios;
+
+GRANT USAGE ON SCHEMA catalogo TO svc_catalogo;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA catalogo TO svc_catalogo;
+
+GRANT USAGE ON SCHEMA ordenes TO svc_ordenes;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ordenes TO svc_ordenes;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ordenes TO svc_ordenes;

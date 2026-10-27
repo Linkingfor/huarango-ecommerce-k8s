@@ -1,0 +1,26 @@
+-- Catálogo inicial de Huarango Market (productos y productores ficticios del caso de estudio).
+-- Si el producto ya existe no se toca, para no pisar cambios hechos desde el panel de administración.
+
+INSERT INTO catalogo.productos (id, nombre, descripcion, categoria, bodega, precio, stock) VALUES
+  ('P-0101', 'Pisco Quebranta 700 ml', 'Pisco puro de uva quebranta, destilado en falca. Aroma suave a frutos secos.', 'piscos', 'Bodega La Tinaja', 58.00, 120),
+  ('P-0102', 'Pisco Italia 700 ml', 'Pisco aromático de uva Italia, notas florales y de cítricos.', 'piscos', 'Bodega El Lagar', 69.00, 80),
+  ('P-0103', 'Pisco Acholado 700 ml', 'Mezcla de quebranta, Italia y torontel. Ideal para pisco sour.', 'piscos', 'Bodega Santa Inés', 64.00, 95),
+  ('P-0104', 'Pisco Mosto Verde Torontel 500 ml', 'Destilado de mosto sin fermentar del todo. Cuerpo sedoso y muy aromático.', 'piscos', 'Bodega La Tinaja', 95.00, 60),
+  ('P-0105', 'Pisco Negra Criolla 700 ml', 'Pisco puro de uva negra criolla, perfil herbal y seco.', 'piscos', 'Bodega Los Molinos', 62.00, 70),
+  ('P-0201', 'Vino Borgoña semiseco 750 ml', 'Vino tinto de uva borgoña, dulzor moderado. Tradición del valle de Ica.', 'vinos', 'Bodega Los Molinos', 28.00, 110),
+  ('P-0202', 'Vino Perfecto Amor 750 ml', 'Vino generoso elaborado con mosto y pisco. Se sirve frío como aperitivo.', 'vinos', 'Bodega Santa Inés', 35.00, 75),
+  ('P-0203', 'Vino Tinto Malbec 750 ml', 'Tinto seco con crianza breve en barrica.', 'vinos', 'Bodega El Lagar', 45.00, 50),
+  ('P-0204', 'Cachina artesanal 1 L', 'Bebida de uva en fermentación inicial. Consumo inmediato.', 'vinos', 'Bodega La Tinaja', 18.00, 40),
+  ('P-0301', 'Tejas de pecana x 12', 'Tejas rellenas de manjar blanco y pecana, bañadas en fondant.', 'tejas', 'Dulcería El Huarango', 30.00, 150),
+  ('P-0302', 'Tejas de limón x 12', 'Cáscara de limón confitada rellena de manjar blanco.', 'tejas', 'Dulcería El Huarango', 28.00, 120),
+  ('P-0303', 'Tejas surtidas x 24', 'Pecana, limón, higo y naranja en una caja para regalo.', 'tejas', 'Dulcería El Huarango', 54.00, 90),
+  ('P-0401', 'Chocotejas de pecana x 12', 'Manjar blanco y pecana cubiertos con chocolate semiamargo.', 'chocotejas', 'Dulcería Valle Dulce', 36.00, 140),
+  ('P-0402', 'Chocotejas de pisco x 12', 'Relleno de pasas maceradas en pisco quebranta.', 'chocotejas', 'Dulcería Valle Dulce', 38.00, 100),
+  ('P-0403', 'Chocotejas de manjar blanco x 12', 'La receta clásica, con chocolate de leche.', 'chocotejas', 'Dulcería Valle Dulce', 34.00, 130),
+  ('P-0501', 'Pecanas peladas 500 g', 'Pecanas del valle de Ica, seleccionadas y sin cáscara.', 'dulces', 'Dulcería El Huarango', 42.00, 85),
+  ('P-0502', 'Frejol colado 500 g', 'Dulce tradicional de frejol, ajonjolí y clavo de olor.', 'dulces', 'Dulcería Valle Dulce', 22.00, 60),
+  ('P-0503', 'Manjar blanco artesanal 500 g', 'Cocido en paila de cobre, sin preservantes.', 'dulces', 'Dulcería Valle Dulce', 16.00, 100),
+  ('P-0601', 'Canasta Iqueña clásica', 'Pisco quebranta 700 ml, tejas surtidas x 12 y chocotejas x 6.', 'canastas', 'Huarango Market', 159.00, 45),
+  ('P-0602', 'Canasta Navideña corporativa', 'Pisco acholado, vino borgoña, tejas x 24, pecanas y tarjeta personalizada.', 'canastas', 'Huarango Market', 249.00, 30),
+  ('P-0603', 'Caja degustación de piscos 4 x 100 ml', 'Quebranta, Italia, acholado y mosto verde para comparar.', 'canastas', 'Huarango Market', 89.00, 55)
+ON CONFLICT (id) DO NOTHING;

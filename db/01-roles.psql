@@ -1,0 +1,13 @@
+-- Un usuario de base de datos por servicio. Cada uno solo tendrá permisos sobre su propio esquema.
+-- Las contraseñas llegan como variables de psql (-v pw_usuarios=...), ver migrar.sh.
+
+SELECT 'CREATE ROLE svc_usuarios LOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'svc_usuarios')\gexec
+SELECT 'CREATE ROLE svc_catalogo LOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'svc_catalogo')\gexec
+SELECT 'CREATE ROLE svc_ordenes LOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'svc_ordenes')\gexec
+
+ALTER ROLE svc_usuarios WITH LOGIN PASSWORD :'pw_usuarios';
+ALTER ROLE svc_catalogo WITH LOGIN PASSWORD :'pw_catalogo';
+ALTER ROLE svc_ordenes  WITH LOGIN PASSWORD :'pw_ordenes';
