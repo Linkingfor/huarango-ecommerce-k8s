@@ -1,0 +1,22 @@
+{
+  "name": "svc-carrito",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Carrito de compras de Huarango Market sobre DynamoDB",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "prom-client": "^15.1.3"
+  }
+}
