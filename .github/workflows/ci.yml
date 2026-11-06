@@ -89,13 +89,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
       - name: Formato
         run: terraform fmt -check -recursive -diff infra
       - name: Validación
         working-directory: infra/envs/lab
         run: |
           terraform init -backend=false -input=false
-          terraform validate
+          terraform validate -json > validacion.json || true
+          # Cada error o advertencia aparece como anotación en el resumen de la ejecución
+          jq -r '.diagnostics[]? | "::\(if .severity == "error" then "error" else "warning" end) file=\(.range.filename // "infra/envs/lab"),line=\(.range.start.line // 1)::\(.summary): \(.detail // "" | gsub("\n"; " "))"' validacion.json
+          jq -e '.valid' validacion.json > /dev/null
 
   kubernetes-y-scripts:
     runs-on: ubuntu-latest
