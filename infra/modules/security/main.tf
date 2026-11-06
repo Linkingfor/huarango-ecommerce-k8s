@@ -10,28 +10,28 @@ terraform {
 
 # ---------------------------------------------------------------- security groups
 resource "aws_security_group" "alb" {
-  name        = "sg-alb"
+  name        = "huarango-alb"
   description = "Balanceador: solo recibe trafico de CloudFront"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-alb" }
 }
 
 resource "aws_security_group" "nodos" {
-  name        = "sg-nodos"
+  name        = "huarango-nodos"
   description = "Nodos de EKS y sus pods"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-nodos" }
 }
 
 resource "aws_security_group" "cluster" {
-  name        = "sg-cluster"
+  name        = "huarango-cluster"
   description = "Interfaces del plano de control de EKS"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-cluster" }
 }
 
 resource "aws_security_group" "rds" {
-  name        = "sg-rds"
+  name        = "huarango-rds"
   description = "PostgreSQL: solo desde los nodos"
   vpc_id      = var.vpc_id
   tags        = { Name = "sg-rds" }
